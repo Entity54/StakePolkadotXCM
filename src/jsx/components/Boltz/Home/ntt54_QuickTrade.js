@@ -10,6 +10,12 @@ import {
 			rococo_transfer_MultiAssetS_FromParachainToParachain, rococo_transfer_MultiAssetWithFee_FromParachainToParachain,
 			transferFromPolkadotToParachain, transfer_xcDOTtoDOT, transfer_FromAcala, transfer_FromMoonbeam,
 			stakeDOTfromPolkadot, stakeDOTfromMoonbeam, getBalanceinAcala, unstakeDOTfromLDOT,
+
+			getMaxDelegationsPerDelegator, getStakingRound, isDelegationRequestPending, isCandidateExitPending, isCandidateRequestPending,
+			getSelectedCandidates, getCandidateInfoDelegationCount, getDelegationCount,
+			delegateGLMR, scheduleRevokeDelegatinFromCandidate, executeDelegationRequestAfterDelayPassed, cancelDelegationRequstFromCandidate,
+			stakeGLMRfromAcala, 
+
 	   } from '../../../../Setup.js';
 
 
@@ -118,6 +124,7 @@ const QuickTrade = ({
 	destinationChainSelected, originChainSelected, tokenSelected, resetAll,
 	availableAmountToTransfer, accountFormats, selectedAction, 
 	getAllBalancesAndAccountFormatsPolkadot, getAllBalancesAndAccountFormats, getROCOCO_AllBalancesAndAccountFormats,
+	collatorAccount, unstakeMessageObj, 
 }) => {
 	
     const [inputTranferAmount, setInputTranferAmount] = useState("");
@@ -255,6 +262,72 @@ const QuickTrade = ({
 				   setInputTranferAmount(""); resetAll();
 			   })
 			   .catch((rejectMsg) => console.log(rejectMsg));
+
+			}
+			
+			//Unstaking GLMR from Moonbeam
+			else if(selectedAction==="unstakeGLMRfromMoonbeam") 
+			{
+				// unstakeMessageObj({candidateAddress, unstakeAction, amountStakedWithCandidate, });
+				const {candidateAddress, unstakeAction, amountStakedWithCandidate } = unstakeMessageObj
+				if (!candidateAddress || !unstakeAction)
+				{
+					console.log(`COLLATOR candidateAddress and/or unstakeAction are not defined. Cannot proceed`);
+					return;
+				}
+
+				console.log(`Unstaking GLMR from Moonbeam candidateAddress:${candidateAddress} unstakeAction:${unstakeAction} amountStakedWithCandidate:${amountStakedWithCandidate}`);
+				setTransfer_IsSubmiting(true);
+				setTransactionMessage(`${unstakeAction==="Cancel"?"Cancel Scheduled Unstake":unstakeAction} GLMR from Moonbeam Collator: ${candidateAddress}`);
+
+			    if (unstakeAction==="Unstake")      //Initate Unstake and wait for delay to claim GLMR
+				{
+				  scheduleRevokeDelegatinFromCandidate(candidateAddress)
+				  .then((resolveMsg) => {
+					  setTransactionMessage(
+						resolveMsg.map((msg, index) => {
+							return  <p key={index}>{msg}</p> 
+						})
+				      );
+
+					  setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },12000);
+					  setTransfer_IsSubmiting(false);
+					  setInputTranferAmount(""); resetAll();
+				  })
+				  .catch((rejectMsg) => console.log(rejectMsg));
+				}
+				else if (unstakeAction==="Cancel")  //cancel a previously triggerred unstake action
+				{
+				  cancelDelegationRequstFromCandidate(candidateAddress)
+				  .then((resolveMsg) => {
+					setTransactionMessage(
+						resolveMsg.map((msg, index) => {
+							return  <p key={index}>{msg}</p> 
+						})
+				    );
+
+					setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },12000);
+					setTransfer_IsSubmiting(false);
+					setInputTranferAmount(""); resetAll();
+				  })
+				  .catch((rejectMsg) => console.log(rejectMsg));
+				}
+				else if (unstakeAction==="Claim")   //ready to Claim GLMR
+				{
+				  executeDelegationRequestAfterDelayPassed( accountList[0], candidateAddress)
+				  .then((resolveMsg) => {
+					setTransactionMessage(
+						resolveMsg.map((msg, index) => {
+							return  <p key={index}>{msg}</p> 
+						})
+				    );
+
+					setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },12000);
+					setTransfer_IsSubmiting(false);
+					setInputTranferAmount(""); resetAll();
+				  })
+				  .catch((rejectMsg) => console.log(rejectMsg));
+				}
 
 			}
 
@@ -1894,20 +1967,39 @@ const QuickTrade = ({
 					{
 						if (orginChain==="Acala" && targetChainDestination==="Moonbeam")
 						{
+							console.log(`We are sending GLMR from Acala to Moonbeam inputTranferAmount:${amount} sendToAddress:${sendToAddress}`);
 							setTransfer_IsSubmiting(true);
 							setTransactionMessage(`Transfer GLMR from Acala to Moonbeam, submitted.`);
 
-							transfer_FromAcala("GLMR", parachainCodes.Moonbeam, sendToAddress, amount)
-							.then((resolveMsg) => {
-								setTransactionMessage(
-										resolveMsg.map((msg, index) => {
-											return ( <p key={index}>{msg}</p> )
-										})
-								);
+							if (selectedAction==="autostakeGLMRtoMoonbeam")
+							{
+								console.log(`GLMR will be sent from Acala to Moonbeam and then staked`);
+								stakeGLMRfromAcala("GLMR", parachainCodes.Moonbeam, sendToAddress, amount, collatorAccount)
+								.then((resolveObj) => {
+									setTransactionMessage(
+											resolveObj.map((msg, index) => {
+												return ( <p key={index}>{msg}</p> )
+											})
+									);
 
-								setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },6000);
-							})
-							.catch((rejectMsg) => console.log(rejectMsg));
+									setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },6000);
+								})
+								.catch((rejectObj) => console.log(rejectObj));
+							}
+							else
+							{
+								transfer_FromAcala("GLMR", parachainCodes.Moonbeam, sendToAddress, amount)
+								.then((resolveMsg) => {
+									setTransactionMessage(
+											resolveMsg.map((msg, index) => {
+												return ( <p key={index}>{msg}</p> )
+											})
+									);
+	
+									setTimeout(() => { getAllBalancesAndAccountFormatsPolkadot(polakdotAccountSigner.address, accountList[0]); },6000);
+								})
+								.catch((rejectMsg) => console.log(rejectMsg));
+							}
 							
 							setTransfer_IsSubmiting(false);
 							setInputTranferAmount("");  resetAll();
@@ -2002,9 +2094,40 @@ const QuickTrade = ({
 	//#endregion
 
 	 
+	//#region collatorDiv
+	const collatorDiv =   (			
+		<div className="form-group">
+			<div className="input-group input-group-lg">
+				<div className="input-group-prepend">
+						<div className="input-group-text form-control default-select  "  style={{fontSize:"22px", textAlign:"center"}}>Collator</div>
+				</div>
+				<input type="text" className="form-control" value={collatorAccount===""?"Chosen From Dropdown":collatorAccount} placeholder={"Selected Collator"} readOnly
+				//     onChange = {(event) => {
+				// 		setSendToAddress(event.target.value);
+				// 	}
+				// } 
+				style={{ color: "white"}} />
+			</div>
+		</div>
+
+	);
+	//#endregion
+
+
 	useEffect(() => {
 		if (targetAccount==="") setSendToAddress("");
 	},[targetAccount]);
+
+
+	useEffect(() => {
+		if (unstakeMessageObj.candidateAddress)
+		{
+			console.log(`||||||||>>>> unstakeMessageObj: `,unstakeMessageObj);
+			setInputTranferAmount(unstakeMessageObj.amountStakedWithCandidate);
+			setSuggestedOriginAccount(unstakeMessageObj.candidateAddress);
+		    // unstakeMessageObj({candidateAddress, unstakeAction, amountStakedWithCandidate, });
+		}
+	},[unstakeMessageObj.candidateAddress]);
     
 
 	return(
@@ -2040,6 +2163,20 @@ const QuickTrade = ({
 
 								{stableDiv}
 							</div>
+
+							{   selectedAction==="autostakeGLMRtoMoonbeam"? 
+								(
+									<div style={{marginTop:"20px"}}>
+										<div className="row" style={{marginBottom:"10px"}}>
+											<div className="col-xl-9 col-xxl-12"></div>
+											<div className="col-xl-3 col-xxl-12">
+											</div>
+										</div>
+										{collatorDiv}
+									</div>
+								)
+								: ("")
+							}
 
 							<div className="row mt-4"  style={{backgroundColor:"",  }}>
 									<div className="col-xl-3"   >

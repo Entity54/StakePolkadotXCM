@@ -1,7 +1,10 @@
 import React, { Suspense, useEffect, useState, useCallback } from 'react';
 
 import { ethers } from 'ethers';  
-import { setApi, setWallet, setup_SubstrateChain, setPolkadotInjector, getAvailableBalance, getAvailableBalancePOLKADOT} from './Setup.js';   //Setup EVM and Polkadto Api
+import { setApi, setWallet, setup_SubstrateChain, setPolkadotInjector, 
+         getAvailableBalance, getAvailableBalancePOLKADOT, 
+         getGLMRstakingParameters, getDelegationScheduledRequestsForCandidateFromDelegator, getDelegatorState, getCandidateInfoDelegationCount, getSelectedCandidates, getDelegationCount, delegateGLMR
+} from './Setup.js';   //Setup EVM and Polkadto Api
 
 // import { web3Accounts, web3Enable, web3FromAddress, web3AccountsSubscribe, web3FromSource, web3ListRpcProviders, web3UseRpcProvider } from '@polkadot/extension-dapp';
 import { web3Enable, web3FromAddress, web3AccountsSubscribe } from '@polkadot/extension-dapp';
@@ -92,13 +95,14 @@ function App() {
               
               setEvm_Api_State(true);
               setAccountList(mm_acounts);
-              setWallet(mm_wallet);
-              const _setupSpecs = { wallet: mm_wallet, provider, pair:"", connected: "C", walletAddress: await mm_wallet.getAddress() };
+              setWallet(mm_wallet, Number(mm_chainId));
+              const _setupSpecs = { wallet: mm_wallet, provider, pair:"", connected: "C", walletAddress: await mm_wallet.getAddress(), mm_chainId, };
               setSetupSpecs(_setupSpecs);
 
               _provider.on('chainChanged', async (chainId) => {
                 window.location.reload();
-                const mm_chainId = await _provider.request({ method: 'eth_chainId' });
+                mm_chainId = await _provider.request({ method: 'eth_chainId' });
+                setWallet(mm_wallet, Number(mm_chainId));
                 console.log(`***** MetaMask Accounts *****:  CHAINID: ${mm_chainId}`);
               });
 
@@ -112,7 +116,7 @@ function App() {
                 
                 setEvm_Api_State(true);
                 setAccountList(accounts);
-                setWallet(mm_wallet);
+                setWallet(mm_wallet, Number(mm_chainId));
 
                 const _setupSpecs = { wallet: mm_wallet, provider, pair:"", connected: "C", walletAddress: await mm_wallet.getAddress() };
                 setSetupSpecs(_setupSpecs);
@@ -188,6 +192,32 @@ function App() {
         const { api: api_moonbeam } = await setup_SubstrateChain("Moonbeam");
         // console.log("api_moonbeam: ",api_moonbeam);
         setApi("Moonbeam", api_moonbeam);
+
+
+
+        const { api: api_moonbase } = await setup_SubstrateChain("MoonbaseAlpha");
+        // console.log("api_moonbase: ",api_moonbase);
+        setApi("MoonbaseAlpha", api_moonbase);
+
+
+        // console.log(`======> MOONBEAM STAKING TESTING <=======`);
+        // const candidateTest = "0x472DdED9e6d2E46171096A64ea15fa6c4f8C6099";
+        // const selectedCandidates = await getSelectedCandidates();
+        // console.log(`======> selectedCandidates: `,selectedCandidates);
+        // await getGLMRstakingParameters();
+        // const scheduleRequestResults = await getDelegationScheduledRequestsForCandidateFromDelegator( candidateTest, "0xa95b7843825449DC588EC06018B48019D1111000");
+        // console.log(`======> scheduleRequestResults: `,scheduleRequestResults);
+        // const delegatorState = await getDelegatorState("0xa95b7843825449DC588EC06018B48019D1111000");
+        // console.log(`======> delegatorState: `,delegatorState);
+        // const { candidateDelegationCount, lowestTopDelegationAmount, topCapacity } = await getCandidateInfoDelegationCount(candidateTest);
+        // console.log(`======> candidateDelegationCount: ${candidateDelegationCount} lowestTopDelegationAmount: ${lowestTopDelegationAmount} topCapacity: ${topCapacity}`);
+        // const delegatorDelegationCount = await getDelegationCount("0xa95b7843825449DC588EC06018B48019D1111000");
+        // console.log(`======> delegatorDelegationCount: ${delegatorDelegationCount}`);
+
+        // await delegateGLMR(candidateTest, "1", candidateDelegationCount, delegatorDelegationCount);
+        // console.log(`======> MOONBEAM STAKING TESTING <=======`);
+
+
 
         // await getAvailableBalancePOLKADOT("5HWdttFeYE89GQDGNRYspsJouxZ56xwm6bzKxSPtbDjwpQbb","DOT","0xa95b7843825449DC588EC06018B48019D1111000")
         // await getAvailableBalancePOLKADOT("5HWdttFeYE89GQDGNRYspsJouxZ56xwm6bzKxSPtbDjwpQbb","ACA","0xa95b7843825449DC588EC06018B48019D1111000")

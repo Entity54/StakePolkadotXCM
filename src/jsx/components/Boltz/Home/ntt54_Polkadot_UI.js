@@ -1,18 +1,20 @@
 import React,{useState,useEffect} from 'react';
 import {Link} from 'react-router-dom';
+import { Row, Col, Card, Dropdown,DropdownButton, ButtonGroup, SplitButton, } from "react-bootstrap";
+
     
 import ausd100 from '../../../../icons/crypto/ausd100.png';
 import dot100 from '../../../../icons/crypto/dot100.png';
 import aca100 from '../../../../icons/crypto/aca100.png';
 import glmr100 from '../../../../icons/crypto/glmr100.png';
 
+import { getSelectedCandidates, getDelegatorState, scheduleRevokeDelegatinFromCandidate, cancelDelegationRequstFromCandidate, executeDelegationRequestAfterDelayPassed }  from '../../../../Setup.js';
 
 
-
-// const Polkadot = ({selectedTokenfunction, setupSpecs, accountList}) => {
 const Polkadot = ({ 
   resetTargetAccount, originChainSelected, destinationChainSelected, selectedTokenfunction, selectedDestinationChainfunction, selectedOriginChainfunction, 
-  resetState, balancesDOT, balancesPAUSD, balancesACA, balancesGLMR, selectedActionfunction,
+  resetState, balancesDOT, balancesPAUSD, balancesACA, balancesGLMR, selectedActionfunction, resetCollatorAccount,
+  accountList, passUnstakeActionMessageFunction
 }) => {
 
       const [action, setAction] = useState("");    
@@ -29,8 +31,25 @@ const Polkadot = ({
       const [rowACA, setRowACA] = useState({opacity: 1, clickable: "" })
       const [rowGLMR, setRowGLMR] = useState({opacity: 1, clickable: "" })
       
+      const [selectedCandidates, setSelectedCandidates] = useState([]); 
+      const [candidate, setCandidate] = useState("");  
+      const [unstakingInfoDiv, setUnstakingInfoDiv] = useState("");  
+
       const colorOriginChain      =  "#FF5F1F";
       const colorDestinationChain =  "#FF5F1F";
+
+
+
+      //#region  UnstakeActionClicked
+      const unstakeActionClicked = async (candidateAddress, unstakeAction, amountStakedWithCandidate) => {
+          console.log(`unstakeActionClicked => CALLED fr ${candidateAddress} with ACTION: ${unstakeAction}`);
+          //"Unstake"  "Cancel" "Claim"
+          // unstakeActionClicked(candiddateObj.candidateAddress, unstakeAction, candiddateObj.amountStakedWithCandidate);
+          selectedTokenfunction(unstakeAction);
+          passUnstakeActionMessageFunction(candidateAddress, unstakeAction, amountStakedWithCandidate);
+      }
+      //#endregion
+
 
 
       //#region Element Properties
@@ -63,7 +82,7 @@ const Polkadot = ({
 
           
       //#region
-      const actionModuleClicked = (choice) => {
+      const actionModuleClicked = async (choice) => {
         console.log(`User has chosen: ${choice}`)
         setAction(choice);
         selectedActionfunction(choice);  //Informs XCM Transfer Center
@@ -98,8 +117,149 @@ const Polkadot = ({
         {
           setInstructionStatus("GLMRunstaking");
           selectedTokenfunction("unstake GLMR")
-          selectedOriginChainfunction("Moonbeam");
+          selectedOriginChainfunction("Collator");
           selectedDestinationChainfunction("Moonbeam");
+
+          // const delegatorState_JSON = await getDelegatorState( accountList[0] );
+          const unstakingCandidatesArray = await getDelegatorState( accountList[0] );
+          console.log(`|||||>>>> unstakingCandidatesArray: `,unstakingCandidatesArray);
+          setUnstakingInfoDiv(
+          // unstakingInfoDiv = (
+//             (2) [{…}, {…}]
+// 0:
+// amountStakedWithCandidate: "1.0"
+// candidateAddress: "0x0CFB2bdD20C5EdeeeEd2D2FbDDb9697F0441668A" candiddateObj.candidateAddress
+// delegation_request_is_pending: true    candiddateObj.delegation_request_is_pending
+// readyToExecuteUnstakingBlokcNumber: 0   candiddateObj.readyToExecuteUnstakingBlokcNumber
+// revokeAmount: "1.0"          candiddateObj.revokeAmount
+// roundBlockLength: 600
+// roundFristBlokc: 2434200
+// roundNumber: 4058
+// whenExecutable: 4016
+
+            unstakingCandidatesArray.map((candiddateObj, index) => {
+              return (
+
+
+              <div className="row" key={index} style={{ marginTop:"10px", cursor:"pointer"}}>
+
+                 {
+                  index===0?
+                  (
+                    <div className="col-xl-4 col-xxl-4 col-lg-6 col-sm-6" style={{height:"70px", pointerEvents: `${stateOfDOT}`}} onClick={() => tokenClicked("DOT")}>
+                      <div className="row">
+                        <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" ></div>
+                        <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" style={{height:"100px",  }}>
+                          <div className="widget-stat card" style={{backgroundColor: `${rowDOT.backgroundColor}`, borderWidth: "1px", borderColor: "#5685e6"}}>
+                            <div className="card-body  p-2" style={{ width:"100%"}}>
+                              <div className="media" style={{height:"60px"}}>
+                                <div className="media-body text-white text-center">
+                                  {/* <h2 className="text-white" onClick={() => tokenClicked("DOT")}>GLMR</h2> */}
+                                  <h2 className="text-white">GLMR</h2>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                  :
+                  (
+                    <div className="col-xl-4 col-xxl-4 col-lg-6 col-sm-6" style={{height:"70px",  pointerEvents: `${stateOfAUSD}`}} onClick={() => tokenClicked("AUSD")}>
+                      <div className="row">
+                        <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" ></div>
+                        <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" style={{height:"100px",  }}>
+                        </div>
+                      </div>
+                  </div>
+                  )
+                 }
+
+                  <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"70px", padding:"2px", opacity:`${rowDOT.opacity}`, transition:"opacity 1s", pointerEvents:`${rowDOT.clickable}`}}  onClick={() => DOT_chainTabClicked("Polkadot")}>
+                    <div className="widget-stat card " style={{ height:"100%", backgroundColor:`${elemDOT[0].activebackgroundColor}`,  opacity: `${elemDOT[0].opacity}`, transition:"opacity 1s",  width:"100%", }}>
+                      <div className="card-body  p-2"  style={{ backgroundColor:"", }}>
+                        <div className="media" style={{height: "50px"}}>
+                          <img src={glmr100} style={{width: "50px", height: "50px"}}></img>
+                          <div className="media-body text-end me-3">
+                            <p className="mb-0 text-white">{`${candiddateObj.candidateAddress.substring(0,6)}...${candiddateObj.candidateAddress.substring(candiddateObj.candidateAddress.length-4)}`}</p>
+                            {/* <h4 className="mb-0 text-white"> {balancesDOT? balancesDOT.Polkadot : ""}</h4>  */}
+                            <h4 className="mb-0 text-white"> {candiddateObj.amountStakedWithCandidate}</h4> 
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"70px", padding:"2px",  }}  onClick={() => {
+                      const unstakeAction = candiddateObj.delegation_request_is_pending? 
+                                            (candiddateObj.readyToExecuteUnstakingBlokcNumber > 0? "Cancel" : "Claim")
+                                            : 
+                                            "Unstake"
+                      unstakeActionClicked(candiddateObj.candidateAddress, unstakeAction, candiddateObj.amountStakedWithCandidate);
+                      }
+                    }
+                    >
+                    <div className="widget-stat card " style={{ height:"100%",  width:"100%",    backgroundColor:  elemDOT[1].activebackgroundColor 
+                    // backgroundColor:`${
+                    //     candiddateObj.delegation_request_is_pending? 
+                    //     (candiddateObj.readyToExecuteUnstakingBlokcNumber > 0? "#FCFCFC" : "#6EFF33")
+                    //     : 
+                    //     elemDOT[1].activebackgroundColor
+                    //   }`
+                    }}>
+                      <div className="card-body  p-2"  >
+                        <div className="media" style={{height: "50px" }}>
+                          <div className="media-body text-center">
+                            {/* <h4 className="mb-0 text-white">{balancesDOT? balancesDOT.Acala : ""}</h4> */}
+                            <h4 className="mb-0 text-white">
+                              <span style={{color: `${
+                                        candiddateObj.delegation_request_is_pending? 
+                                        (candiddateObj.readyToExecuteUnstakingBlokcNumber > 0? "#FCFCFC" : "#6EFF33")
+                                        : 
+                                        "white"
+
+                                   }`
+                              }}
+                              >
+                                { 
+                                    candiddateObj.delegation_request_is_pending? 
+                                    (candiddateObj.readyToExecuteUnstakingBlokcNumber > 0? "Cancel" : "Claim")
+                                    : 
+                                    "Unstake"
+                                }
+                              </span>
+                                
+                            </h4>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"70px", padding:"2px",}} >
+                    <div className="widget-stat card " style={{ height:"100%", backgroundColor:"#3a3f49", width:"100%", }}>
+                      <div className="card-body  p-2"  style={{ backgroundColor:"", }}>
+                        <div className="media" style={{height: "50px"}}>
+                          <div className="media-body text-center">
+                            <h4 className="mb-0 text-white">{(candiddateObj.readyToExecuteUnstakingBlokcNumber)!==null? ((candiddateObj.readyToExecuteUnstakingBlokcNumber)===0?"Ready To Claim":candiddateObj.readyToExecuteUnstakingBlokcNumber ) : "Not Initiated"}</h4>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+              </div> 
+
+            )
+
+           })
+
+          );
+
+
         }
 
         setStateOfMatrix("auto");
@@ -114,7 +274,7 @@ const Polkadot = ({
 
         if (originChainSelected==="Origin Chain") 
         {
-          setInstructionStatus("Step3");
+          // setInstructionStatus("Step3");
 
           selectedOriginChainfunction(choice);
           switch (choice) {
@@ -127,7 +287,10 @@ const Polkadot = ({
             case "Moonbeam":
               setElemDOT((result) => [ result[0], result[1], { activebackgroundColor: colorOriginChain, backgroundColorDefault: "#8fcb02", opacity: 1,} ] );
               break;
-        }
+          }
+
+          if (action==="XCMtransfer") setInstructionStatus("Step3");
+
         }
         else if (destinationChainSelected==="Target Chain") 
         {
@@ -222,13 +385,13 @@ const Polkadot = ({
     //#endregion
 
     //#region
-    const GLMR_chainTabClicked = (choice) => {
+    const GLMR_chainTabClicked = async (choice) => {
     console.log(`chainTabClicked originChainSelected:${originChainSelected} destinationChainSelected:${destinationChainSelected} choice:${choice}`)
     setStateOfAUSD("none");  setStateOfACA("none");  setStateOfDOT("none");   
 
     if (originChainSelected==="Origin Chain") 
     {
-      setInstructionStatus("Step3");
+      // setInstructionStatus("Step3");
 
       selectedOriginChainfunction(choice);
       switch (choice) {
@@ -238,7 +401,17 @@ const Polkadot = ({
         case "Moonbeam":
           setElemGLMR((result) => [ result[0],  { activebackgroundColor: colorOriginChain, backgroundColorDefault: "#8fcb02", opacity: 1,} ] );
           break;
-    }
+      }
+
+      if (action==="XCMtransfer") setInstructionStatus("Step3")
+      else if (action==="autostakeGLMRtoMoonbeam") 
+      {
+        const selected_Candidates = await getSelectedCandidates();
+        setSelectedCandidates(selected_Candidates);
+        setInstructionStatus("ChooseCollator");
+      }
+
+
     }
     else if (destinationChainSelected==="Target Chain") 
     {
@@ -330,6 +503,7 @@ const Polkadot = ({
       setAction("");
       setInstructionStatus("");
       setStateOfDOT("none"); setStateOfAUSD("none");  setStateOfACA("none");  setStateOfGLMR("none");   
+      setCandidate(""); resetCollatorAccount(""); selectedActionfunction("");
 		}
 
 	}
@@ -401,6 +575,48 @@ const Polkadot = ({
           :  instructionStatus==="GLMRstaking"? (
             <h4 className="fs-30 text-center mt-2"><span style={{color:"white"}}>Select The <span style={{color:"yellow"}}>Origin Chain GLMR Balance </span> To Transfer And Stake</span></h4>
           )
+          :  instructionStatus==="ChooseCollator"? (
+            <div className="row">
+              <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6"></div>
+              <div className="col-xl-8 col-xxl-4 col-lg-6 col-sm-6">
+              {/* <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6"> */}
+                <p className="fs-30 text-center mt-2"><span style={{color:"white"}}>Choose a <span style={{color:"yellow"}}>Collator </span> from the Candidate List</span></p>
+              </div>
+
+              <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6">
+              {/* <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6"> */}
+                  <div className="basic-dropdown">
+                    <Dropdown>
+                      <Dropdown.Toggle variant="primary">
+                          {candidate===""?"Candidate List": `${candidate.substring(0,6)}...${candidate.substring(candidate.length-4)}` }
+                      </Dropdown.Toggle>
+
+                      <Dropdown.Menu style={{maxHeight:"420px", overflowY:"scroll"}}>
+                        <h2 className="dropdown-header fs-18">Active Collators</h2>
+                        {
+                          selectedCandidates.map((candid, index) => {
+                            return (
+                                      <Dropdown.Item key={index} onClick={() => {
+                                          setCandidate(candid);
+                                          resetCollatorAccount(candid);
+                                        }
+                                      }>{candid}</Dropdown.Item>
+                                   )
+                            })
+                        }
+                      </Dropdown.Menu>
+
+                    </Dropdown>
+
+                        {/* <Dropdown.Item href="#">Collator 1</Dropdown.Item>
+                        <Dropdown.Item href="#">Collator 10</Dropdown.Item> */}
+
+                  </div>
+              </div>
+            </div>
+          )
+
+
           :  instructionStatus==="DOTunstaking"? (
             <h4 className="fs-30 text-center mt-2"><span style={{color:"white"}}>Unstaking <span style={{color:"yellow"}}>DOT from LDOT </span>and depositing at Acala</span></h4>
           )
@@ -419,6 +635,11 @@ const Polkadot = ({
 
 
     <div style={{pointerEvents: `${stateOfMatrix}`}}>
+
+{ action!=="unstakeGLMRfromMoonbeam"? 
+(
+
+
       <div className="card" style={{backgroundColor:"171622", color:"#9E38FF"}}>
         <div className="card-body" style={{marginLeft:"-50px", marginBottom:"-10px", marginTop:"-10px"}}>
           <div className="basic-form">
@@ -694,6 +915,83 @@ const Polkadot = ({
 				</div>
 			</div>
 		</div>
+  )
+:
+  (
+    <div className="card" style={{backgroundColor:"171622", color:"#9E38FF"}}>
+    <div className="card-body" style={{marginLeft:"-50px", marginBottom:"-10px", marginTop:"-10px"}}>
+      <div className="basic-form">
+        <form className="form-wrapper">
+          <div className="form-group mb-0">
+
+          {/* ------------------Parachain Title Row------------------- */}
+
+          <div className="row" style={{ marginTop:"10px"}}>
+            <div className="col-xl-4 col-xxl-4 col-lg-6 col-sm-6 px-3" style={{height:"50px", padding:"2px", cursor:"pointer"}} onClick={() => tokenClicked("")}>
+              <div className="row">
+                <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" ></div>
+                <div className="col-xl-6 col-xxl-4 col-lg-6 col-sm-6" style={{height:"75px"}}>
+                  <div className="widget-stat card" style={{backgroundColor: "black", borderWidth: "1px", borderColor: "#5685e6"}}>
+                    <div className="card-body  p-2" style={{ width:"100%"}}>
+                      <div className="media" style={{height:"35px"}}>
+                        <div className="media-body text-warning text-center">
+                        <h2 className="text-warning" ><span style={{color:"orange"}} onClick={() => tokenClicked("RESET")}>RESET</span></h2>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+            </div>
+          </div>
+
+          <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"50px", padding:"2px" }}>
+            <div className="widget-stat card" style={{ height:"100%", backgroundColor: "#0E86D4", width:"100%", }}>
+              <div className="card-body  p-2"  style={{ backgroundColor:"", }}>
+                <div className="media" style={{height:"40px"}}>
+                  <div className="media-body text-white text-center">
+                   <h4 className="text-white">COLLATOR</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"50px", padding:"2px" }}>
+            <div className="widget-stat card" style={{ height:"100%", backgroundColor: "#0E86D4", width:"100%", }}>
+              <div className="card-body  p-2"  style={{ backgroundColor:"", }}>
+                <div className="media" style={{height:"40px"}}>
+                  <div className="media-body text-white text-center">
+                    <h4 className="text-white">ACTION</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xl-2 col-xxl-4 col-lg-6 col-sm-6" style={{ height:"50px", padding:"2px" }}>
+            <div className="widget-stat card" style={{ height:"100%", backgroundColor: "#0E86D4", width:"100%", }}>
+              <div className="card-body  p-2"  style={{ backgroundColor:"", }}>
+                <div className="media" style={{height:"40px"}}>
+                  <div className="media-body text-white text-center">
+                    <h4 className="text-white">WAIT PERIOD</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ------------------2nd ROW------------------- */}
+
+{unstakingInfoDiv}
+
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+  )
+}
 	</div>
 	</>
 	)

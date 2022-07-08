@@ -1,14 +1,21 @@
 import { Resolver } from '@ethersproject/providers';
 import { ApiPromise, WsProvider, Keyring }     from '@polkadot/api';
 // import { numberToHex, u8aToString, stringToU8a, u8aToHex, hexToU8a, BN, stringToHex } from '@polkadot/util'; // Some helper functions used here
-import { numberToHex, u8aToHex, BN, stringToHex, hexToU8a } from '@polkadot/util'; // Some helper functions used here
+import { numberToHex, u8aToHex, BN, stringToHex, hexToU8a,     stringToU8a, stringShorten,  } from '@polkadot/util'; // Some helper functions used here
 import { evmToAddress, addressToEvm } from '@polkadot/util-crypto';
 // import { blake2AsHex, evmToAddress, addressToEvm } from '@polkadot/util-crypto';
 
 import { ethers } from 'ethers';  
 
 import IERC20_raw from './Abis/IERC20';  
-import Xtokens_raw from './Abis/Xtokens';       
+import Xtokens_raw from './Abis/Xtokens';  
+
+
+import IMoonbeamParachainStaking_raw from './Abis/IMoonbeamParachainStaking';       
+const MoonbeamParachainStakingAddress    = "0x0000000000000000000000000000000000000800";    
+
+
+
 const XtokensAddress    = "0x0000000000000000000000000000000000000804";    
 const mantissa12 = new BN("1000000000000");
 const mantissa10 = new BN("10000000000");
@@ -17,16 +24,19 @@ const mantissa8 = new BN("100000000");
 
 
 
-let wallet, Xtokens, 
+let wallet, Xtokens, MoonbeamParachainStaking, mm_chainId,
+
     KusamaApi, KaruraApi, MoonriverApi, KintsugiApi, PhalaApi, BasiliskApi, ShidenApi, StatemineApi,
     PolkadotApi, AcalaApi, MoonbeamApi, AstarApi, HydraDXApi, pPhalaApi, StatemintApi, ParallelApi
     ;
-let Rococo_RhalaApi, Rococo_BasiliskApi, Rococo_KaruraApi;
-const setWallet = (_wallet=null) => { 
+let Rococo_RhalaApi, Rococo_BasiliskApi, Rococo_KaruraApi, MoonbaseAlphaApi;
+const setWallet = (_wallet=null, _mm_chainId=null) => { 
   if (_wallet) {
       wallet = _wallet;
-      console.log("New wallet : ",wallet);
+      mm_chainId = _mm_chainId;
+      console.log("New wallet : ",wallet,` ***** mm_chainId: ${mm_chainId}`); //Moonbeam=1284 , Moonrivr=1285, MoonbaseAlpha=1287
       Xtokens     =  new ethers.Contract( XtokensAddress, Xtokens_raw.abi, wallet);
+      MoonbeamParachainStaking  =  new ethers.Contract( MoonbeamParachainStakingAddress, IMoonbeamParachainStaking_raw.abi, wallet);
   }
 }
 const setApi = (apiName, api) => {
@@ -51,6 +61,9 @@ const setApi = (apiName, api) => {
   else if (apiName==="Rococo_Phala")    { Rococo_RhalaApi    = api; apiObj["r2004"] = api; }
   else if (apiName==="Rococo_Basilisk") { Rococo_BasiliskApi = api; apiObj["r2090"] = api; }
   else if (apiName==="Rococo_Karura")   { Rococo_KaruraApi   = api; apiObj["r2000"] = api; }
+
+  else if (apiName==="MoonbaseAlpha")   { MoonbaseAlphaApi   = api; }
+
 }
 
 const apiObj = {
@@ -3699,6 +3712,677 @@ const getAvailableBalancePOLKADOT = async (account, token=null, metamaskAccount,
 
 
 
+
+
+
+
+
+  //#region ***** MOONBEAM GLMR STAKING *****
+
+    //#region ***** getMaxDelegationsPerDelegator //*****
+    const getMaxDelegationsPerDelegator = async () => {
+        //maxDelegationsPerDelegator
+        /*** MOONBEAM OR MOONBASEALPHA ***/
+        let maxDelegationsPerDelegator;
+        if (mm_chainId===1284)
+            maxDelegationsPerDelegator = await MoonbeamApi.consts.parachainStaking.maxDelegationsPerDelegator.toNumber();
+        else if (mm_chainId===1287)
+            maxDelegationsPerDelegator = await MoonbaseAlphaApi.consts.parachainStaking.maxDelegationsPerDelegator.toNumber();
+        // console.log(`getGLMRstakingParameters=> maxDelegationsPerDelegator: `,maxDelegationsPerDelegator);
+
+        return maxDelegationsPerDelegator;
+    }
+    //#endregion
+
+    //#region ***** getStakingRound //*****
+    const getStakingRound = async () => {
+        // const round = await MoonbeamParachainStaking.round();
+        // console.log(`getGLMRstakingParameters = >  round: ${round}`);
+
+        /*** MOONBEAM OR MOONBASEALPHA ***/
+        let round;
+        if (mm_chainId===1284)
+            round = await MoonbeamApi.query.parachainStaking.round();
+        else if (mm_chainId===1287)
+            round = await MoonbaseAlphaApi.query.parachainStaking.round();
+        // console.log(`getGLMRstakingParameters = >  Current Round: `,round.current.toString()," firstBlock: ",round.first.toString(),"  length: ",round.length.toString());
+
+        return {roundNumber: round.current.toNumber(), roundFristBlokc: round.first.toNumber(), roundBlockLength: round.length.toNumber()};
+    }
+    //#endregion
+
+    //#region ***** isDelegationRequestPending(mm_account, candidate) //*****
+    const isDelegationRequestPending = async (mm_account, candidate) => {
+          const delegation_request_is_pending = await MoonbeamParachainStaking.delegation_request_is_pending(mm_account, candidate);
+          // console.log(`getGLMRstakingParameters => delegation_request_is_pending mm_account:${mm_account} for candidate:${candidate} :  ${delegation_request_is_pending}`);
+  
+          return delegation_request_is_pending;
+    }
+    //#endregion
+
+    //#region ***** isCandidateExitPending(candidate) //*****
+    const isCandidateExitPending = async (candidate) => {
+        const candidate_exit_is_pending = await MoonbeamParachainStaking.candidate_exit_is_pending(candidate);
+        // console.log(`getGLMRstakingParameters => candidate_exit_is_pending candidate:${candidate} :  ${candidate_exit_is_pending}`);
+
+        return candidate_exit_is_pending;
+    }
+    //#endregion
+
+    //#region ***** isCandidateRequestPending(candidate) //*****
+    const isCandidateRequestPending = async (candidate) => {
+        const candidate_request_is_pending = await MoonbeamParachainStaking.candidate_request_is_pending(candidate);
+        // console.log(`getGLMRstakingParameters => candidate:${candidate}  candidate_request_is_pending:  ${candidate_request_is_pending}`);
+
+        return candidate_request_is_pending;
+    }
+    //#endregion
+
+
+    //#region ***** getSelectedCandidates //*****
+    const getSelectedCandidates = async () => {
+        let total_selected_Candidates;
+        //List Of Candidates
+        // total_selected_Candidates = await MoonbaseAlphaApi.query.parachainStaking.selectedCandidates();
+        // console.log(`getGLMRstakingParameters=> total_selected_Candidates: `,total_selected_Candidates.toHuman());
+        // // ['0x043f726A4eB956A19314386049769beC89Dd0F34', '0x0CFB2bdD20C5EdeeeEd2D2FbDDb9697F0441668A', '0x1610fCE4655F77D11184fbF31E497B927326ac90', '0x24C275f0719fDAeC6356c4Eb9f39eCB9c4D37CE1', '0x2e0B60e17A9C386A691525E6dDA539fcb2235B60', '0x31C5aA398Ae12B0dc423f47D47549095aA8c93A5', '0x339A2446f55d31eD5EAC81B466ac76F153f09A6D', '0x348e48e7Ea1d121862492BDF5F48292c71810dFC', '0x3937B5F83f8e3DB413bD202bAf4da5A64879690F', '0x3A7D3048F3CB0391bb44B518e5729f07bCc7A45D', '0x4515e1ce5d4C42dA4b0561f52EF12DeE19F9C020', '0x472DdED9e6d2E46171096A64ea15fa6c4f8C6099', '0x4c5A56ed5A4FF7B09aA86560AfD7d383F4831Cce', '0x623c9E50647a049F92090fe55e22cC0509872FB6', '0x645b0a77E7f1c438afacdad9ac7e6b5D3e39Db4e', '0x7204d30092A5D4aFBE41023AEcecb1Ac968C9410', '0x7c87c666063e4C1047794829Ef09b0B9E5F8a0E
+
+        total_selected_Candidates = await MoonbeamParachainStaking.selected_candidates();
+        // console.log(`getGLMRstakingParameters = >  total_selected_Candidates: `,total_selected_Candidates);
+        // const shortenSelected_Candidates = total_selected_Candidates.map(address =>  stringShorten(address));
+        
+        let fulllCandidates = [];
+        const selected_Candidates = await total_selected_Candidates.filter(async (candidateAccount) => {
+            const { candidateDelegationCount, lowestTopDelegationAmount, topCapacity } = await getCandidateInfoDelegationCount(candidateAccount);
+            if (topCapacity.toLowerCase()==="partial") return candidateAccount;
+            else fulllCandidates.push(candidateAccount);
+        })
+        console.log(`getSelectedCandidates => total_selected_Candidates.length: ${total_selected_Candidates.length} selected_Candidates.length:${selected_Candidates.length} fulllCandidates.length:${fulllCandidates.length}`);
+
+        return selected_Candidates;
+    }
+    //#endregion
+
+
+    //#region ***** getCandidateInfoDelegationCount(candidate) //*****
+    const getCandidateInfoDelegationCount = async (candidate="0x043f726A4eB956A19314386049769beC89Dd0F34") => {
+          let candidateDelegationCount;
+
+          /*** MOONBEAM OR MOONBASEALPHA ***/
+          let candidateInfo;
+          if (mm_chainId===1284)
+              candidateInfo = await MoonbeamApi.query.parachainStaking.candidateInfo(candidate);
+          else if (mm_chainId===1287)
+              candidateInfo = await MoonbaseAlphaApi.query.parachainStaking.candidateInfo(candidate);
+
+          const candidateInfo_toHuman = candidateInfo.toHuman();
+          const candidateInfo_JSON = candidateInfo.toJSON();
+
+          const topCapacity = candidateInfo_JSON.topCapacity;
+          const lowestTopDelegationAmount = ethers.utils.formatUnits( candidateInfo_JSON.lowestTopDelegationAmount , 18);
+          // console.log(`getGLMRstakingParameters=> delegationCount: ${candidateInfo_JSON.delegationCount} topCapacity: ${topCapacity} Expect:Partial lowestTopDelegationAmount: ${lowestTopDelegationAmount}  status: ${candidateInfo_toHuman.status} Expect Active candidateInfo_toHuman: `,candidateInfo_toHuman);
+          // getGLMRstakingParameters=> candidateInfo:  {bond: '1,000,000,000,000,000,000,000', delegationCount: '11', totalCounted: '20,548,510,120,539,161,329,664', lowestTopDelegationAmount: '1,000,000,000,000,000,000', highestBottomDelegationAmount: '0', …}
+          // candidateDelegationCount = candidateInfo_toHuman.delegationCount;
+
+          const isCandidate = await MoonbeamParachainStaking.is_candidate(candidate);
+          // console.log(`getGLMRstakingParameters = > candidate:${candidate} isCandidate :  ${isCandidate}`);
+
+          const isSelectedCandidate = await MoonbeamParachainStaking.is_selected_candidate(candidate);
+          // console.log(`getGLMRstakingParameters = > candidate:${candidate} isSelectedCandidate :  ${isSelectedCandidate}`);
+
+          candidateDelegationCount = await MoonbeamParachainStaking.candidate_delegation_count(candidate);
+          // console.log(`getGLMRstakingParameters => candidate:${candidate} candidateDelegationCount:  ${candidateDelegationCount}`);
+
+          return { candidateDelegationCount, lowestTopDelegationAmount, topCapacity, };
+    }
+    //#endregion
+
+
+    //#region ***** getCandidateInfoDelgationCount //*****
+    const getDelegationCount = async (mm_account="0xa95b7843825449DC588EC06018B48019D1111000") => {
+          let delegatorDelegationCount;
+
+          // //User's Number of Existing Delegations
+          // const delegatorInfo = await MoonbaseAlphaApi.query.parachainStaking.delegatorState(candidate);
+          // console.log(`getGLMRstakingParameters=> delegatorInfo: `,delegatorInfo.toHuman());
+          // //  id: '0xa95b7843825449DC588EC06018B48019D1111000', delegations: Array(1), total: '1,000,000,000,000,000,000', lessTotal: '1,000,000,000,000,000,000', status: 'Active'}
+          // console.log(`getGLMRstakingParameters=> delegationCount: `,delegatorInfo.toHuman()["delegations"].length);
+          // delegatorDelegationCount = delegatorInfo.toHuman()["delegations"].length
+   
+
+          delegatorDelegationCount = await MoonbeamParachainStaking.delegator_delegation_count(mm_account);
+          // console.log(`getGLMRstakingParameters => mm_account:${mm_account} delegatorDelegationCount:  ${delegatorDelegationCount}`);
+
+          return delegatorDelegationCount;
+    }
+    //#endregion
+
+
+    //#region ***** getDelegationScheduledRequestsForCandidateFromDelegator(candidate, mm_account) //*****
+    const getDelegationScheduledRequestsForCandidateFromDelegator = async (candidate, mm_account) => {
+       
+        let whenExecutable = null, revokeAmount = null;
+
+        /*** MOONBEAM OR MOONBASEALPHA ***/
+        let scheduledRequests;
+        if (mm_chainId===1284)
+              scheduledRequests = await MoonbeamApi.query.parachainStaking.delegationScheduledRequests(candidate); 
+        else if (mm_chainId===1287)
+              scheduledRequests = await MoonbaseAlphaApi.query.parachainStaking.delegationScheduledRequests(candidate); 
+
+        const scheduledRequests_JSON = scheduledRequests.toJSON();
+        const scheduledRequestsHuman = scheduledRequests.toHuman();
+        // console.log(`getGLMRstakingParameters=> scheduledRequestsHuman: `,scheduledRequestsHuman);
+
+        for (let i=0; i<scheduledRequests.length; i++)
+        {
+          const actionKeys = Object.keys(scheduledRequestsHuman[i].action)
+          // console.log(`getGLMRstakingParameters=> getDelegationScheduledRequestsForCandidate=> mm_account:${mm_account} Delegator: ${scheduledRequestsHuman[i].delegator}  WhenExecutable: ${scheduledRequestsHuman[i].whenExecutable}  action: `,scheduledRequestsHuman[i].action,`  actionKeys: `,actionKeys);
+          if ( actionKeys.includes("Revoke") ) 
+          {
+            // console.log(`REVOKE AMOUNT WEI: ${scheduledRequestsHuman[i].action["Revoke"]}`);
+            if ( mm_account.toLowerCase()===(scheduledRequestsHuman[i].delegator).toLowerCase())
+            {
+              // whenExecutable = scheduledRequestsHuman[i].whenExecutable;
+              whenExecutable = scheduledRequests_JSON[i].whenExecutable;
+              revokeAmount =  ethers.utils.formatUnits( scheduledRequests_JSON[i].action["revoke"] , 18);
+            }
+
+          }
+
+        }
+
+        return {whenExecutable, revokeAmount, }
+    }
+    //#endregion
+
+
+    //#region ***** getDelegatorState(mm_account) //*****
+    const getDelegatorState = async (mm_account) => {
+
+      /*** MOONBEAM OR MOONBASEALPHA ***/
+      let blockNumber, delegatorState;
+      if (mm_chainId===1284)
+      {
+        blockNumber = Number(await MoonbeamApi.query.system.number());  
+        delegatorState = await MoonbeamApi.query.parachainStaking.delegatorState(mm_account); 
+      }
+      else if (mm_chainId===1287)
+      {
+        blockNumber = Number(await MoonbaseAlphaApi.query.system.number());  
+        delegatorState = await MoonbaseAlphaApi.query.parachainStaking.delegatorState(mm_account); 
+      }
+
+      const delegatorState_JSON = delegatorState.toJSON()
+      const delegatorStateHuman = delegatorState.toHuman();
+
+      console.log(`||| |||| delegatorState_JSON: `,delegatorState_JSON);
+      if (!delegatorState_JSON) return;
+      
+      const delegationsArray = delegatorState_JSON.delegations; 
+      const totalStaked =  ethers.utils.formatUnits( delegatorState_JSON.total , 18);
+      const unstakedToClaim = ethers.utils.formatUnits( delegatorState_JSON.lessTotal , 18);
+      const status = delegatorStateHuman.status;
+      // console.log(`getGLMRstakingParameters=> totalStaked: ${totalStaked} unstakedToClaim:${unstakedToClaim} status:${status} delegatorState: `,delegatorState);
+      
+
+      let unstakingCandidatesArray = []
+
+      for (let i=0; i<delegationsArray.length; i++)
+      {
+        const candidate = delegationsArray[i].owner;
+        const amountStakedWithCandidate = Number(ethers.utils.formatUnits( delegationsArray[i].amount , 18)).toFixed(4);
+        console.log(`getGLMRstakingParameters=> getDelegatorState=> Delegator: ${delegatorState_JSON.id}  candidate: ${candidate}  amountStakedWithCandidate: ${amountStakedWithCandidate}`);
+
+
+        const {whenExecutable, revokeAmount} = await getDelegationScheduledRequestsForCandidateFromDelegator(candidate, mm_account );
+        // const candidate_request_is_pending = await isCandidateRequestPending(candidate)
+        // const candidate_exit_is_pending = await isCandidateExitPending(candidate)
+        const delegation_request_is_pending = await isDelegationRequestPending(mm_account, candidate );
+        // const currentRound = await getStakingRound();
+        const {roundNumber, roundFristBlokc, roundBlockLength} = await getStakingRound();
+        let readyToExecuteUnstakingBlokcNumber = null;
+        if (whenExecutable) 
+          readyToExecuteUnstakingBlokcNumber = Math.max( roundFristBlokc + ( (whenExecutable - roundNumber) * roundBlockLength ) - blockNumber , 0);
+        
+        unstakingCandidatesArray.push({candidateAddress: candidate, amountStakedWithCandidate, whenExecutable, revokeAmount, delegation_request_is_pending, roundNumber, roundFristBlokc, roundBlockLength, readyToExecuteUnstakingBlokcNumber, })
+      }
+
+      // return delegatorState_JSON;
+      return unstakingCandidatesArray;
+
+    }
+    //#endregion
+
+
+    //#region ***** delegateGLMR(candidate, _amount, candidateDelegationCount, delegatorDelegationCount) //*****
+    const delegateGLMR = async (candidate, _amount="1", candidateDelegationCount, delegatorDelegationCount) => {
+
+          const amount = (ethers.utils.parseUnits( _amount , 18)).toString(); 
+          console.log(`candidate:${candidate} amount:${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount}`);
+
+          // const unsignedTx = await MoonbeamParachainStaking.populateTransaction.delegate(candidate, amount, candidateDelegationCount, delegatorDelegationCount);
+          // const signedTx = await wallet.signTransaction(unsignedTx);
+          // const tx1 = await wallet.submitTransaction(signedTx);
+
+          const tx = await MoonbeamParachainStaking.delegate(candidate, amount, candidateDelegationCount, delegatorDelegationCount);
+          tx.wait(3).then( async reslveMsg => {
+            console.log(`tx1 for delegate  candidate: ${candidate} amount: ${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount} is mined resolveMsg : `,reslveMsg);
+            console.log(`TX1===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+  
+          });
+
+    }
+    //#endregion
+
+
+    //REVOKE A DELEGATION 2-STEPS PROCESS 
+    //STEP 1 SCHEDULE REQUEST TO REVOKE DELEGATION FOR A SPECIFIC CANDIDATE  
+    //#region ***** scheduleRevokeDelegatinFromCandidate(candidate) //*****
+    const scheduleRevokeDelegatinFromCandidate = async (candidate) => {
+      console.log(` *********************** Inside scheduleRevokeDelegatinFromCandidate for ${candidate} *********************** `);
+      return new Promise (async (resolve, reject) => {
+
+        const tx = await MoonbeamParachainStaking.schedule_revoke_delegation(candidate);
+        tx.wait(3).then( async reslveMsg => {
+          console.log(`tx for delegate  candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+          console.log(`TX===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+      
+          const txUnStakingMsg = 
+          [
+            `Unstaking GLMR initiated for Collator: ${candidate} .`, 
+            `Moonbeam transactionHash: ${reslveMsg.transactionHash} .`,
+            `Finalised at Block Number: ${reslveMsg.blockNumber} Gas used:${reslveMsg.gasUsed}.`,
+          ];
+
+          resolve(txUnStakingMsg);
+        });
+
+      })
+
+    }
+    //#endregion
+
+
+    //STEP 2 EXECUTE THE REQUEST TO REVOKE A DELEGATION executeDeleationRequest AFTER THE EXIT DELAY HAS PASSED
+    //THIS WILL FAIL IF IT IS NOT REQUESTED OR IT IS NOT DUE
+    //#region ***** executeDelegationRequestAfterDelayPassed(mm_account, candidate) //*****
+    const executeDelegationRequestAfterDelayPassed = async (mm_account, candidate) => {
+      console.log(` *********************** Inside executeDelegationRequestAfterDelayPassed for ${mm_account} from ${candidate} *********************** `);
+      return new Promise (async (resolve, reject) => {
+
+        const tx = await MoonbeamParachainStaking.execute_delegation_request(mm_account, candidate);
+        tx.wait(3).then( async reslveMsg => {
+          console.log(`tx3 for delegate mm_account:${mm_account} candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+          console.log(`TX3===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+      
+          const txUnStakingMsg = 
+          [
+            `Claimed GLMR from Collator: ${candidate} .`, 
+            `Moonbeam transactionHash: ${reslveMsg.transactionHash} .`,
+            `Finalised at Block Number: ${reslveMsg.blockNumber} Gas used:${reslveMsg.gasUsed}.`,
+          ];
+
+          resolve(txUnStakingMsg);
+        });
+
+      })
+
+    }
+    //#endregion
+
+    //CANCEL REQUEST TO REVOKE A DELEGATION 
+    // You can check your delegator state again on Polkadot.js Apps to confirm that your delegation is still intact.
+    //#region ***** cancelDelegationRequstFromCandidate(candidate) //*****
+    const cancelDelegationRequstFromCandidate = async (candidate) => {
+      console.log(` *********************** Inside cancelDelegationRequstFromCandidate for ${candidate} *********************** `);
+      return new Promise (async (resolve, reject) => {
+
+          const tx = await MoonbeamParachainStaking.cancel_delegation_request(candidate);
+          tx.wait(3).then( async reslveMsg => {
+            console.log(`tx for delegate candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+            console.log(`TX===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+        
+            const txUnStakingMsg = 
+            [
+              `Cancelled Unstaking GLMR initiation for Collator: ${candidate} .`, 
+              `Moonbeam transactionHash: ${reslveMsg.transactionHash} .`,
+              `Finalised at Block Number: ${reslveMsg.blockNumber} Gas used:${reslveMsg.gasUsed}.`,
+            ];
+  
+            resolve(txUnStakingMsg);
+          });
+
+      })
+  
+    }
+    //#endregion
+
+
+
+
+
+    //#region getGLMRstakingParameters FOR TESTING ONLY
+    const getGLMRstakingParameters = async () => {
+
+      console.log(` *********************** Inside getGLMRstakingParameters *********************** `);
+      return new Promise (async (resolve, reject) => {
+
+          // if (!polkadotInjector || !polkadotInjectorAddress || !AcalaApi) {
+          //   console.log(`unstakeDOTfromLDOT polkadotInjector and/or polkadotInjectorAddress and/or AcalaApi are null. Cannot proceed!!!`);
+          //   resolve(["Polkadot Extension Error Please Refresh Dapp"]);
+          //   return;
+          // }
+
+          // const mm_account = "0xa95b7843825449DC588EC06018B48019D1111000"
+          // const candidate = "0x0CFB2bdD20C5EdeeeEd2D2FbDDb9697F0441668A";
+
+          // const isDelegator = await MoonbeamParachainStaking.is_delegator(mm_account);
+          // console.log(`getGLMRstakingParameters = > mm_account:${mm_account}  isDelegator  :  ${isDelegator}`);
+
+          // const isCandidate = await MoonbeamParachainStaking.is_candidate(candidate);
+          // console.log(`getGLMRstakingParameters = > candidate:${candidate} isCandidate :  ${isCandidate}`);
+
+          // const isSelectedCandidate = await MoonbeamParachainStaking.is_selected_candidate(candidate);
+          // console.log(`getGLMRstakingParameters = > candidate:${candidate} isSelectedCandidate :  ${isSelectedCandidate}`);
+
+          // const round = await MoonbeamParachainStaking.round();
+          // console.log(`getGLMRstakingParameters = >  round: ${round}`);
+
+          // const candidateDelegationCount = await MoonbeamParachainStaking.candidate_delegation_count(candidate);
+          // console.log(`getGLMRstakingParameters => candidate:${candidate} candidateDelegationCount:  ${candidateDelegationCount}`);
+
+          // const delegatorDelegationCount = await MoonbeamParachainStaking.delegator_delegation_count(mm_account);
+          // console.log(`getGLMRstakingParameters => mm_account:${mm_account} delegatorDelegationCount:  ${delegatorDelegationCount}`);
+
+          // const selectedCandidates = await MoonbeamParachainStaking.selected_candidates();
+          // console.log(`getGLMRstakingParameters = >  selectedCandidates: `,selectedCandidates);
+
+          // const delegation_request_is_pending = await MoonbeamParachainStaking.delegation_request_is_pending(mm_account, candidate);
+          // console.log(`getGLMRstakingParameters => delegation_request_is_pending mm_account:${mm_account} for candidate:${candidate} :  ${delegation_request_is_pending}`);
+
+
+          // const candidate_exit_is_pending = await MoonbeamParachainStaking.candidate_exit_is_pending(candidate);
+          // console.log(`getGLMRstakingParameters => candidate_exit_is_pending candidate:${candidate} :  ${candidate_exit_is_pending}`);
+
+          // const candidate_request_is_pending = await MoonbeamParachainStaking.candidate_request_is_pending(candidate);
+          // console.log(`getGLMRstakingParameters => candidate:${candidate}  candidate_request_is_pending:  ${candidate_request_is_pending}`);
+
+
+                //THIS FAILS WHY?
+                // const delegator_exit_is_pending = await MoonbeamParachainStaking.delegator_exit_is_pending("0x043f726A4eB956A19314386049769beC89Dd0F34");
+                // console.log(`getGLMRstakingParameters = >  delegator_exit_is_pending 0x043f726A4eB956A19314386049769beC89Dd0F34 :  ${delegator_exit_is_pending}`);
+      
+
+
+          
+          //TODO delegator state to confirm you have delegated
+
+          //TODO EXTINSICS delegationScheduledRequests for Collator to confirm we have requested
+
+
+          // const amount = (ethers.utils.parseUnits( "1" , 18)).toString(); 
+          // console.log(`candidate:${candidate} amount:${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount}`)
+
+          
+          // //DELEGATE DONE
+          // const tx1 = await MoonbeamParachainStaking.delegate(candidate, amount, candidateDelegationCount, delegatorDelegationCount);
+          // tx1.wait(3).then( async reslveMsg => {
+          //   console.log(`tx1 for delegate  candidate: ${candidate} amount: ${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount} is mined resolveMsg : `,reslveMsg);
+          //   console.log(`TX1===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+  
+          //   // const txSendKSMMsg = 
+          //   // [
+          //   //   `Moonriver Transaction hash: ${reslveMsg.transactionHash}`,
+          //   //   `Finalised at Block Number: ${reslveMsg.blockNumber}`,
+          //   //   `Tranferred From: ${reslveMsg.from} Amount: ${_amount} To: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed}`,
+          //   // ];  
+          //   // resolve(txSendKSMMsg);
+          // });
+
+
+          //REVOKE A DELEGATION 2-STEPS PROCESS 
+          //STEP 1 SCHEDULE  REQUEST TO REVOKE DELEGATION FOR A SPECIFIC CANDIDATE scheduleRevokeDelegation DONE
+          // const tx2 = await MoonbeamParachainStaking.schedule_revoke_delegation(candidate);
+          // tx2.wait(3).then( async reslveMsg => {
+          //   console.log(`tx2 for delegate  candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+          //   console.log(`TX2===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+        
+          // });
+
+          //STEP 2 EXECUTE THE REQUEST TO REVOKE A DELEGATION executeDeleationRequest AFTER THE EXIT DELAY HAS PASSED
+          //THIS WILL FAIL IF IT IS NOT REQUESTED OR IT IS NOT DUE   TRIED FOR 0x043f726A4eB956A19314386049769beC89Dd0F34 AND WORKED PERFECT
+          // const tx3 = await MoonbeamParachainStaking.execute_delegation_request(mm_account, candidate);
+          // tx3.wait(3).then( async reslveMsg => {
+          //   console.log(`tx3 for delegate mm_account:${mm_account} candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+          //   console.log(`TX3===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+        
+          // });
+
+
+          //CANCEL REQUEST TO REVOKE A DELEGATION  DONE
+          // You can check your delegator state again on Polkadot.js Apps to confirm that your delegation is still intact.
+          // const tx4 = await MoonbeamParachainStaking.cancel_delegation_request(candidate);
+          // tx4.wait(3).then( async reslveMsg => {
+          //   console.log(`tx3 for delegate candidate: ${candidate} is mined resolveMsg : `,reslveMsg);
+          //   console.log(`TX3===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+        
+          // });
+
+
+
+        });
+    }
+    //#endregion
+
+
+
+    //#region ***** stakeGLMRfromAcala //*****
+    const stakeGLMRfromAcala = async (currency, parachain=1000, EVMaccount="", amount="1", candidateAccount="") => {
+
+        console.log(`Inside stakeGLMRfromAcala currency:${currency} parachain:${parachain} EVMaccount:${EVMaccount} amount:${amount} candidateAccount:${candidateAccount}`);
+
+        return new Promise (async (resolve, reject) => {
+  
+          if (!polkadotInjector || !polkadotInjectorAddress || !AcalaApi  || !MoonbeamApi) {
+            console.log(`stakeGLMRfromAcala polkadotInjector and/or polkadotInjectorAddress and/or AcalaApi  and/or MoonbeamApi are null. Cannot proceed!!!`);
+            resolve("Polkadot Extension Error Please Refresh Dapp");
+            return;
+          }
+          
+          let minTransferAndStakeAmount;    //Moonbeam 50 GLMR  MoonbaseAlpha 1 DEV We ask 51 GLMR and 1.1 DEV respectively
+          if (mm_chainId===1284) minTransferAndStakeAmount = 51;
+          else if (mm_chainId===1287)  minTransferAndStakeAmount = 1.1;
+
+          if ( Number(amount) < minTransferAndStakeAmount ) 
+          {
+            resolve([`Amount to transfer and stake cannot be less than ${minTransferAndStakeAmount}`]);
+            return;
+          }
+
+          if (candidateAccount==="") 
+          {
+            resolve([`Collator Account cannot be empty.`]);
+            return;
+          }
+            
+
+          /*** MOONBEAM OR MOONBASEALPHA ***/
+          //Moonbeam Balance
+          // let balanceInfo;
+          // if (mm_chainId===1284)
+          //     balanceInfo = await MoonbeamApi.query.system.account(EVMaccount);   // Retrieve the account balance & nonce via the system module
+          // else if (mm_chainId===1287)
+          //     balanceInfo = await MoonbaseAlphaApi.query.system.account(EVMaccount);   // Retrieve the account balance & nonce via the system module
+          // const { nonce, data: balance } = balanceInfo;
+
+          const { nonce, data: balance } = await MoonbeamApi.query.system.account(EVMaccount);   // Retrieve the account balance & nonce via the system module
+
+
+          let MoonbeamBalance = null, MoonbeamBalanceWEI = null;
+          if (balance) 
+          {
+            MoonbeamBalance = Number( ethers.utils.formatUnits( (balance.toJSON()).free, 18) ).toFixed(4);
+            MoonbeamBalanceWEI = ethers.BigNumber.from(`${ Number((balance.toJSON()).free) }`)
+            console.log(`stakeGLMRfromAcala Moonbeam For account:${EVMaccount} FREE MoonbeamBalance: ${MoonbeamBalance} MoonbeamBalanceWEI: ${MoonbeamBalanceWEI.toString()}`);
+          };
+
+
+          const beneficiary =  { accountKey20: { network: "Any",  key: EVMaccount } };
+          const destWeight = new BN(1000000000);
+          const interior = {
+                        x2: [
+                              { 
+                                Parachain: parachain,
+                              },
+                              beneficiary
+                            ]
+                     };
+  
+          const sentAmount = ethers.utils.parseUnits(amount, 18);
+          const decimals=18; 
+          const currencyId =  { ForeignAsset: 0 };
+  
+  
+          const txCurrencyParachainToParachain = await AcalaApi.tx.xTokens
+          .transfer(
+              currencyId,
+              sentAmount,
+              { V1: {
+                              parents: 1,
+                              interior,
+                    } 
+              },
+              destWeight
+          )         
+          .signAndSend(polkadotInjectorAddress, { signer: polkadotInjector.signer }, async ({ status, events=[], dispatchError }) => {
+              // console.log(`Current status: `,status,` Current status is ${status.type}`);
+              let errorInfo;
+              if (dispatchError) {
+                if (dispatchError.isModule) {
+                  // for module errors, we have the section indexed, lookup
+                  const decoded = AcalaApi.registry.findMetaError(dispatchError.asModule);
+                  const { docs, name, section } = decoded;
+                  errorInfo = `${section}.${name}`;
+                  console.log(`txCurrencyParachainToParachain dispatchError1 ${section}.${name}: ${docs.join(' ')}`);
+                } else {
+                  // Other, CannotLookup, BadOrigin, no extra info
+                  errorInfo = dispatchError.toString();
+                  console.log(`txCurrencyParachainToParachain dispatchError2: `,dispatchError.toString(),"errorInfo: ",errorInfo);
+                }
+              }
+              else console.log(`txCurrencyParachainToParachain ***** NO DISAPTCHEERROR *****: `);
+  
+              if (status.isFinalized) {
+                let ExtrinsicResult, extrinsicHash, originFees, tranferredAmount, treasuryFees, XcmpMessageSent;
+  
+                // Loop through all events
+                events.forEach(async ({ phase, event: { data, method, section } }) => {
+                    const extrinsicIndexinBlock = phase.asApplyExtrinsic;
+                    // console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+                    
+                    if (method==="ExtrinsicSuccess") 
+                    {
+                      ExtrinsicResult = "Succeeded"; 
+                      const extrinsicBlockHash = status.asFinalized;
+                      const signedBlock = await AcalaApi.rpc.chain.getBlock(extrinsicBlockHash);
+                      signedBlock.block.extrinsics.forEach(({ hash, method: { method, section } }, index) => {
+                        if (index===Number(extrinsicIndexinBlock)) extrinsicHash = `${hash.toString()}`
+                      });
+    
+                      const txSendMsg = 
+                                          [
+                                            `Acala Extrinsic hash: ${extrinsicHash}`,
+                                            `Finalised at Block Hash: ${extrinsicBlockHash}`,
+                                          ];  
+                      txSendMsg.push( `Treasury Fees: ${treasuryFees}`, `Xcmp Message Sent: ${XcmpMessageSent}`);
+  
+
+                      setTimeout(async () => {
+                          //#region STAKE GLMR ONCE IT ARRIVES AT MOONBEAM
+                          /*** MOONBEAM OR MOONBASEALPHA ***/
+                          // const { nonce, data: newBalance } = await MoonbaseAlphaApi.query.system.account(EVMaccount);     
+                          const { nonce, data: newBalance } = await MoonbeamApi.query.system.account(EVMaccount);        
+
+                          // const newMoonbeamBalanceWEI =  Number((newBalance.toJSON()).free);
+                          // const newMoonbeamBalanceWEI =  new BN((newBalance.toJSON()).free);
+                          const newMoonbeamBalanceWEI = ethers.BigNumber.from(`${ Number((newBalance.toJSON()).free) }`);
+
+                          const freshExcessWEI = newMoonbeamBalanceWEI.sub(MoonbeamBalanceWEI);   //AMOUNT TO STAKE
+                          console.log(`stakeGLMRfromAcala Moonbeam For account:${EVMaccount} FREE newMoonbeamBalanceWEI: ${newMoonbeamBalanceWEI.toString()} MoonbeamBalanceWEI: ${MoonbeamBalanceWEI.toString()} freshExcessWEI: ${freshExcessWEI.toString()}`);
+                          // console.log(`stakeGLMRfromAcala Moonbeam For account:${EVMaccount} FREE newMoonbeamBalanceWEI: ${newMoonbeamBalanceWEI} MoonbeamBalanceWEI: ${MoonbeamBalanceWEI} freshExcessWEI: ${freshExcessWEI}`);
+
+
+                          //STAKE VIA PRECOMPILE  
+                          // console.log(`NOW WE ARE READY TO STAKE USING THE PRECOMPILE`);
+
+                          const delegatorDelegationCount = await getDelegationCount(EVMaccount);
+                          console.log(`stakeGLMRfromAcala ======> EVMaccount:${EVMaccount} delegatorDelegationCount: ${delegatorDelegationCount}`);
+                          const { candidateDelegationCount, lowestTopDelegationAmount, topCapacity } = await getCandidateInfoDelegationCount(candidateAccount);
+                          console.log(`stakeGLMRfromAcala ======> candidateDelegationCount: ${candidateDelegationCount} lowestTopDelegationAmount: ${lowestTopDelegationAmount} topCapacity: ${topCapacity}`);
+
+                          // await delegateGLMR(candidateTest, "1", candidateDelegationCount, delegatorDelegationCount);
+                          // const amount = (ethers.utils.parseUnits( _amount , 18)).toString(); 
+                          const amount =  freshExcessWEI;
+                          const stakedGLMRAmount = Number( ethers.utils.formatUnits( amount, 18) ).toFixed(4);
+                          console.log(`candidateAccount:${candidateAccount} amount:${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount}`);
+
+                          const tx = await MoonbeamParachainStaking.delegate(candidateAccount, amount, candidateDelegationCount, delegatorDelegationCount);
+                          tx.wait(3).then( async reslveMsg => {
+                            console.log(`tx1 for delegate  candidateAccount: ${candidateAccount} amount: ${amount} candidateDelegationCount:${candidateDelegationCount} delegatorDelegationCount:${delegatorDelegationCount} is mined resolveMsg : `,reslveMsg);
+                            console.log(`TX1===> transactionHash: ${reslveMsg.transactionHash} from: ${reslveMsg.from} to: ${reslveMsg.to} gasUsed: ${reslveMsg.gasUsed} blockNumber: ${reslveMsg.blockNumber}`);
+
+                            const txStakingMsg = 
+                            [
+                              `Staked ${stakedGLMRAmount} GLMR at Moonbeam transactionHash: ${reslveMsg.transactionHash}`, 
+                              `with Collator: ${candidateAccount} .`,
+                              `Finalised at Block Number: ${reslveMsg.blockNumber} Gas used:${reslveMsg.gasUsed}.`,
+                              // `Updated Free GLMR Balance: ${ethers.utils.formatUnits(ethers.BigNumber.from(`${freeLDOT}`),10)}`
+                            ];
+
+                            resolve([...txSendMsg, ...txStakingMsg]);
+                          });
+
+                        },12000);                      
+
+                        //#endregion
+
+                    }
+                    else if (method==="ExtrinsicFailed") resolve(["Extrisnic Failed"]);
+                    else if (method==="Deposit" && section==="treasury")  treasuryFees = `${ethers.utils.formatUnits(ethers.BigNumber.from(`${data[0]}`),decimals)}`;    
+                    else if (method==="XcmpMessageSent" && section==="xcmpQueue")   XcmpMessageSent = `${data[0]}`;
+  
+                    // else if (method==="Withdrawn"  && section==="tokens") tranferredAmount =`${ethers.utils.formatUnits(ethers.BigNumber.from(`${data[2]}`),decimals)}`;
+  
+                });
+  
+                txCurrencyParachainToParachain();
+              }
+              
+          });
+         
+        })
+  
+    }
+    //#endregion 
+
+
+  //#endregion 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   //#region ***** KARURA KSM STAKING *****
 
     //#region ***** Transfer from Relay to Parachain //*****   0x1270dbdE6Fa704f9363e47Dd05493D5dae329A4d is Pablo Moon Account
@@ -4405,5 +5089,28 @@ export {
           stakeDOTfromMoonbeam,
           getBalanceinAcala,
           unstakeDOTfromLDOT,
+
+
+              getGLMRstakingParameters,
+          stakeGLMRfromAcala,
+
+          getMaxDelegationsPerDelegator,
+          getSelectedCandidates,
+          getStakingRound,
+          isDelegationRequestPending,
+          isCandidateExitPending,
+          isCandidateRequestPending,
+          // getSelectedCandidatesAndMAxDelegationsPerDelegator,
+          getCandidateInfoDelegationCount,
+          getDelegationCount,
+          delegateGLMR,
+          scheduleRevokeDelegatinFromCandidate,
+          executeDelegationRequestAfterDelayPassed,
+          cancelDelegationRequstFromCandidate,
+          getDelegationScheduledRequestsForCandidateFromDelegator,
+          getDelegatorState,
+
+
+
 
        }

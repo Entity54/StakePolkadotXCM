@@ -39,6 +39,12 @@ const DEX = ({ setupSpecs, relaySpecs, karuraAlphaSpecs, blockHeader, accountLis
 	const [resetState, setResetState] = useState(false);
 	const [selectedAction, setSelectedAction] = useState("");    
 
+	const [collatorAccount, setCollatorAccount] = useState("");
+
+	const [unstakeMessageObj, setUnstakeMessageObj] = useState({candidateAddress: null, unstakeAction: null, amountStakedWithCandidate: null });
+
+
+
 	//Rococo
 	const [rococoBalancesBSX, setRococoBalancesBSX]  = useState("");
 	const [rococoBalancesPHA, setRococoBalancesPHA] = useState("");
@@ -220,9 +226,20 @@ const DEX = ({ setupSpecs, relaySpecs, karuraAlphaSpecs, blockHeader, accountLis
 		setTargetAccount(trgtAccount);
 	};
 
+	const resetCollatorAccount = (colAccount) => {
+		setCollatorAccount(colAccount);
+	};
+
 	const resetAll = () => {
 		resetState?setResetState(false):setResetState(true);
 	};
+
+	
+	const passUnstakeActionMessageFunction = (candidateAddress, unstakeAction, amountStakedWithCandidate) => {
+		setUnstakeMessageObj({candidateAddress, unstakeAction, amountStakedWithCandidate, });
+	};
+
+
 
 	const { changeBackground, background } = useContext(ThemeContext);
 	useEffect(() => {
@@ -299,7 +316,9 @@ const DEX = ({ setupSpecs, relaySpecs, karuraAlphaSpecs, blockHeader, accountLis
 													resetState={resetState} selectedActionfunction={selectedActionfunction} 
 													resetTargetAccount={resetTargetAccount} destinationChainSelected={destinationChainSelected} originChainSelected={originChainSelected} selectedDestinationChainfunction={selectedDestinationChainfunction} selectedOriginChainfunction={selectedOriginChainfunction} selectedTokenfunction={selectedTokenfunction} 
 													balancesDOT={balancesDOT} balancesACA={balancesACA} balancesGLMR={balancesGLMR} balancesPAUSD={balancesPAUSD} 
-													// setupSpecs={setupSpecs} accountList={accountList} blockHeader={blockHeader} accountFormats={accountFormats} 
+													resetCollatorAccount={resetCollatorAccount}  accountList={accountList}
+													passUnstakeActionMessageFunction={passUnstakeActionMessageFunction}
+													// setupSpecs={setupSpecs} blockHeader={blockHeader} accountFormats={accountFormats} 
 												/>
 											</Tab.Pane>
 
@@ -326,6 +345,7 @@ const DEX = ({ setupSpecs, relaySpecs, karuraAlphaSpecs, blockHeader, accountLis
 								getAllBalancesAndAccountFormatsPolkadot={getAllBalancesAndAccountFormatsPolkadot}
 								getAllBalancesAndAccountFormats={getAllBalancesAndAccountFormats}
 								getROCOCO_AllBalancesAndAccountFormats={getROCOCO_AllBalancesAndAccountFormats}
+								collatorAccount={collatorAccount} unstakeMessageObj={unstakeMessageObj}
 							/>
 						</div>
 						{/* RIGHT PART OF THE SCREEN END*/}
